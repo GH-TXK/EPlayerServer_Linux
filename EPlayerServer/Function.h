@@ -1,4 +1,6 @@
 #pragma once
+#include <functional>
+#include <sys/types.h>
 
 class CFunctionBase {
 public:

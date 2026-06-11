@@ -82,6 +82,7 @@
   <ItemGroup>
     <ClInclude Include="Epoll.h" />
     <ClInclude Include="Function.h" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="Process.h" />
     <ClInclude Include="Socket.h" />
     <ClInclude Include="Thread.h" />

@@ -12,6 +12,8 @@ class Buffer :public std::string
 public:
 	Buffer() :std::string() {}
 	Buffer(size_t size) :std::string() { resize(size); }
+	Buffer(const std::string& str):std::string(str){}
+	Buffer(const char* str) :std::string(str) {}
 	operator char* () { return (char*)c_str(); }
 	operator char* () const { return (char*)c_str(); }
 	operator const char* ()const { return c_str(); }
@@ -39,6 +41,12 @@ public:
 		addr_in.sin_port = port;
 		addr_in.sin_addr.s_addr = inet_addr(ip);
 	}
+	CSockParam(const Buffer& path, int attr) {
+		ip = path;
+		addr_un.sun_family = AF_UNIX;
+		strcpy(addr_un.sun_path, path);
+		this->attr = attr;
+	}
 	~CSockParam() {};
 	CSockParam(const CSockParam& param) {
 		ip = param.ip;
@@ -64,7 +72,7 @@ public:
 
 public:
 	sockaddr_in addr_in;
-	sockaddr_in addr_un;
+	sockaddr_un addr_un;
 	Buffer ip;
 	short port;
 	int attr;
@@ -100,7 +108,11 @@ public:
 			close(fd);
 		}
 	}
+	virtual operator int() { return m_socket; }
+	virtual operator int()const { return m_socket; }
+
 protected:
+
 	//套接字描述符， 默认是-1
 	int m_socket;
 	//状态0初始化未完成， 1初始化完成， 2连接完成， 3已经关闭

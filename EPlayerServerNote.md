@@ -448,4 +448,361 @@
    | **基类指针调用子类方法** | `Base* p = new Derived()` |
    | **安全析构**             | `virtual ~Base()`         |
 
+## 18.线程的封装
+
+### 点：
+
+1. ```
+   static void* ThreadEntry(void* arg) {
+   		CThread* thiz = (CThread*)arg;
+   		struct sigaction act = { 0 };
+   		sigemptyset(&act.sa_mask);
+   		act.sa_flags = SA_SIGINFO;
+   		act.sa_sigaction = &CThread::Sigaction;
+   		sigaction(SIGUSR1, &act, NULL);
+   		sigaction(SIGUSR2, &act, NULL);
    
+   		thiz->EnterThread();
+   
+   		if (thiz->m_thread)thiz->m_thread = 0;
+   		pthread_t thread = pthread_self();//不是冗余，有可能被stop函数把m_thread给清零了
+   		auto it = m_mapThread.find(thread);
+   		if (it != m_mapThread.end())
+   			m_mapThread[thread] = NULL;
+   		pthread_detach(thread);
+   		pthread_exit(NULL);
+   	}
+   ```
+
+   下面我把这段 `ThreadEntry()` 的逻辑完整拆开，让你能清楚理解它在做什么、为什么这么写、每一步的作用是什么。你的代码其实是一个典型的 **pthread 线程入口函数**，带有 **信号处理、线程退出清理、线程对象映射管理** 等功能。
+
+   ## 🎯 **一句话总结这段代码的作用**
+
+   > **为线程安装 SIGUSR1/SIGUSR2 信号处理器 → 调用对象的线程主函数 → 清理线程映射 → detach → 退出线程。**
+
+   ## 🧩 **逐行深度解析**
+
+   ### 1. 取回线程对应的对象指针
+
+   cpp
+
+   ```
+   CThread* thiz = (CThread*)arg;
+   ```
+
+   线程创建时传入的 `this` 指针，现在取回来用于调用成员函数。
+
+   ## 🧱 **安装信号处理器**
+
+   cpp
+
+   ```
+   struct sigaction act = { 0 };
+   sigemptyset(&act.sa_mask);
+   act.sa_flags = SA_SIGINFO;
+   act.sa_sigaction = &CThread::Sigaction;
+   sigaction(SIGUSR1, &act, NULL);
+   sigaction(SIGUSR2, &act, NULL);
+   ```
+
+   ### 作用：
+
+   - 为当前线程安装 **SIGUSR1** 和 **SIGUSR2** 的处理函数
+   - 使用 `sa_sigaction`（带 siginfo 的高级处理方式）
+   - 这意味着线程可以通过 `pthread_kill(thread, SIGUSR2)` 被唤醒或终止
+
+   这与你之前的 stop 逻辑完全对应。
+
+   ## 🚀 **进入线程主逻辑**
+
+   cpp
+
+   ```
+   thiz->EnterThread();
+   ```
+
+   这是你真正的线程执行函数（业务逻辑）。
+
+   ## 🧹 **线程退出清理：清除 m_thread**
+
+   cpp
+
+   ```
+   if (thiz->m_thread) thiz->m_thread = 0;
+   ```
+
+   ### 为什么？
+
+   因为 stop 函数可能已经把 `m_thread` 清零了，这里再清一次确保一致性。
+
+   ## 🔍 **获取当前线程 ID**
+
+   cpp
+
+   ```
+   pthread_t thread = pthread_self();
+   ```
+
+   注释已经说明：
+
+   > 不是冗余，有可能被 stop 函数把 m_thread 给清零了
+
+   所以必须重新获取。
+
+   ## 🗺️ **从线程映射表中删除自己**
+
+   cpp
+
+   ```
+   auto it = m_mapThread.find(thread);
+   if (it != m_mapThread.end())
+       m_mapThread[thread] = NULL;
+   ```
+
+   ### 作用：
+
+   - 你的框架维护了一个 `pthread_t → CThread*` 的映射
+   - 线程退出时必须把自己从映射中清除
+   - 避免野指针
+
+   ## 🔚 **分离线程**
+
+   cpp
+
+   ```
+   pthread_detach(thread);
+   ```
+
+   ### 作用：
+
+   - 线程结束后自动回收资源
+   - 不需要 join
+   - 防止资源泄漏
+
+   ## 📴 **退出线程**
+
+   cpp
+
+   ```
+   pthread_exit(NULL);
+   ```
+
+   ### 作用：
+
+   - 正常退出线程
+   - 不会影响整个进程
+
+   # 📘 **整体流程图（逻辑）**
+
+   1. 取回对象指针
+   2. 安装 SIGUSR1 / SIGUSR2 信号处理器
+   3. 执行线程主逻辑 `EnterThread()`
+   4. 清理线程 ID
+   5. 从全局映射表中移除自己
+   6. detach 自己
+   7. pthread_exit() 退出
+
+   # 🧠 **为什么要这么写？（关键设计思想）**
+
+   ### ✔ 1. 信号用于线程控制
+
+   你的 stop 函数会：
+
+   - `pthread_timedjoin_np()` 等待线程退出
+   - 超时后 `pthread_kill(thread, SIGUSR2)`
+
+   所以线程必须安装 SIGUSR2 处理器。
+
+   ### ✔ 2. detach 避免资源泄漏
+
+   如果线程不 detach 或 join，会产生 zombie thread。
+
+   ### ✔ 3. 映射表用于线程管理
+
+   `m_mapThread[pthread_self()] = this;`   让线程函数能通过线程 ID 找到对应对象。
+
+   ### ✔ 4. pthread_exit() 是最安全的退出方式
+
+   不会影响其他线程，也不会导致资源泄漏。
+
+   # 📌 **总结（最精炼版）**
+
+   这段 `ThreadEntry()` 的作用是：
+
+   - 为线程安装信号处理器
+   - 执行线程主逻辑
+   - 清理线程 ID 和映射
+   - detach 自己
+   - 安全退出
+
+   这是一个非常完整、健壮的 pthread 线程入口函数写法。
+
+2. ```
+   		struct sigaction act = { 0 };
+   		sigemptyset(&act.sa_mask);
+   		act.sa_flags = SA_SIGINFO;
+   		act.sa_sigaction = &CThread::Sigaction;
+   		sigaction(SIGUSR1, &act, NULL);
+   		sigaction(SIGUSR2, &act, NULL);
+   		thiz->EnterThread();
+   ```
+
+   查看我的想法
+
+   这几行其实是在做一件事：**给当前线程装上“信号处理大脑”，然后再正式跑线程逻辑。**   我们一行一行拆开来看。
+
+   ### 1. 初始化 `struct sigaction`
+
+   cpp
+
+   ```
+   struct sigaction act = { 0 };
+   ```
+
+   **作用：**
+
+   - 定义一个 `sigaction` 结构体，用来描述“收到某个信号时要怎么处理”。
+   - 用 `{ 0 }` 把整个结构体清零，避免里面有脏数据（比如未初始化的指针、flag 等）。
+
+   `struct sigaction` 大致长这样（简化）：
+
+   c
+
+   ```
+   struct sigaction {
+       void     (*sa_handler)(int);
+       void     (*sa_sigaction)(int, siginfo_t*, void*);
+       sigset_t  sa_mask;
+       int       sa_flags;
+   };
+   ```
+
+   你后面就是在把这些字段一个个配置好。
+
+   ### 2. 设置信号屏蔽集（mask）
+
+   cpp
+
+   ```
+   sigemptyset(&act.sa_mask);
+   ```
+
+   **作用：**
+
+   - 把 `sa_mask` 清空，表示**在执行信号处理函数时，不额外屏蔽其他信号**。
+   - 换句话说：处理 SIGUSR1/SIGUSR2 时，其他信号仍然可以被递送（除非系统默认屏蔽）。
+
+   如果你想在处理某个信号时暂时屏蔽其他信号，可以用 `sigaddset()` 往 `sa_mask` 里加。
+
+   ### 3. 设置 flags：使用 `sa_sigaction` 形式的处理函数
+
+   cpp
+
+   ```
+   act.sa_flags = SA_SIGINFO;
+   ```
+
+   **关键点：**
+
+   - `SA_SIGINFO` 表示：**使用** `sa_sigaction` **这个函数指针，而不是** `sa_handler`。
+
+   - 也就是说，信号处理函数的签名是：
+
+     cpp
+
+     ```
+     void CThread::Sigaction(int signo, siginfo_t* info, void* ucontext);
+     ```
+
+     而不是简单的：
+
+     cpp
+
+     ```
+     void handler(int signo);
+     ```
+
+   **好处：**
+
+   - 可以拿到更多信息，比如：
+     - 哪个线程/进程发的信号
+     - 附加数据（`sigqueue` 发送的）
+     - 上下文信息等
+
+   ### 4. 设置信号处理函数指针
+
+   cpp
+
+   ```
+   act.sa_sigaction = &CThread::Sigaction;
+   ```
+
+   **作用：**
+
+   - 指定：当收到信号时，调用 `CThread::Sigaction` 这个函数。
+
+   - 因为是 `sa_sigaction`，所以函数签名应该是：
+
+     cpp
+
+     ```
+     void CThread::Sigaction(int signo, siginfo_t* info, void* ucontext);
+     ```
+
+   > 注意： 这个函数要么是 `static` 成员函数，要么是普通的全局/命名空间函数， 不能是非 static 成员函数（因为非 static 成员函数多了一个隐含的 `this` 参数，函数指针类型对不上）。
+
+   ### 5. 为 SIGUSR1 和 SIGUSR2 安装处理器
+
+   cpp
+
+   ```
+   sigaction(SIGUSR1, &act, NULL);
+   sigaction(SIGUSR2, &act, NULL);
+   ```
+
+   **作用：**
+
+   - 把刚刚配置好的 `act` 安装到：
+     - 信号 `SIGUSR1`
+     - 信号 `SIGUSR2`
+   - 以后当前线程（严格说是当前进程的这个线程上下文）收到这两个信号时，就会调用 `CThread::Sigaction`。
+
+   结合你之前的代码：
+
+   - 外部会用 `pthread_kill(thread, SIGUSR2);` 给线程发信号
+   - 线程在这里注册了 SIGUSR2 的处理函数
+   - 所以可以在 `Sigaction` 里做：
+     - 唤醒阻塞
+     - 设置退出标志
+     - 做清理等
+
+   ### 6. 进入线程主逻辑
+
+   cpp
+
+   ```
+   thiz->EnterThread();
+   ```
+
+   **作用：**
+
+   - 真正开始执行这个线程的业务逻辑。
+   - 在这之前，信号处理已经设置好了——也就是说：
+     - 在线程运行过程中，如果外部发 SIGUSR1 / SIGUSR2
+     - 就会进入 `CThread::Sigaction`，而不是默认行为（可能是终止进程）
+
+   **设计上的意义：**
+
+   - 你把“线程控制”（通过信号）和“线程业务逻辑”（`EnterThread()`）分开了。
+   - 线程一启动，就先把“控制通道”（信号处理）接好，再开始干活。
+   - 外部 stop 逻辑就可以通过信号优雅地干预线程。
+
+   ### 🧠 串起来看一遍
+
+   这几行代码的整体语义是：
+
+   1. 准备一个 `sigaction` 结构体，清零。
+   2. 设置：处理信号时不额外屏蔽其他信号。
+   3. 指定：用带 `siginfo` 的高级处理函数形式。
+   4. 把 `CThread::Sigaction` 作为 SIGUSR1 / SIGUSR2 的处理函数。
+   5. 然后开始执行线程主逻辑 `EnterThread()`，在运行过程中就能被信号“控制”。

@@ -103,10 +103,12 @@ public:
 		m_status = 3;
 		if (m_socket != -1)
 		{
+			unlink(m_param.ip);
 			int fd = m_socket;
 			m_socket = -1;
 			close(fd);
 		}
+		return 0;
 	}
 	virtual operator int() { return m_socket; }
 	virtual operator int()const { return m_socket; }
@@ -128,6 +130,7 @@ public:
 	CLocalSocket() :CSocketBase() {}
 	CLocalSocket(int sock) :CSocketBase() {
 		m_socket = sock;
+		m_status = 0;
 	}
 	//传递析构操作
 	virtual ~CLocalSocket() {
@@ -135,34 +138,100 @@ public:
 	}
 public:
 	//初始化， 服务器套接字创建， bind， listen， 客户端套接字创建
+	//virtual int Init(const CSockParam& param)
+	//{
+	//	// 已初始化过，直接返回
+	//	if (m_status != 0)
+	//		return 0;
+
+	//	m_param = param;
+
+	//	// 情况 1：普通初始化（客户端或服务器）
+	//	if (m_socket == -1)
+	//	{
+	//		int type = (m_param.attr & SOCK_ISUDP) ? SOCK_DGRAM : SOCK_STREAM;
+	//		m_socket = socket(PF_LOCAL, type, 0);
+	//		if (m_socket == -1) return -2;
+
+	//		m_status = 1; // 已初始化但未连接
+	//	}
+	//	else
+	//	{
+	//		// 情况 2：accept() 得到的新 fd
+	//		m_status = 2; // 已连接
+	//	}
+
+	//	int ret = 0;
+
+	//	// 服务器 bind + listen
+	//	if (m_param.attr & SOCK_ISSERVER)
+	//	{
+	//		//unlink(m_param.ip); // 删除旧 socket 文件
+
+	//		ret = bind(m_socket, m_param.addrun(), sizeof(sockaddr_un));
+	//		if (ret == -1) return -3;
+
+	//		ret = listen(m_socket, 32);
+	//		if (ret == -1) return -4;
+
+	//		m_status = 1; // server ready
+	//	}
+
+	//	// 非阻塞
+	//	if (m_param.attr & SOCK_ISNONBLOCK)
+	//	{
+	//		int option = fcntl(m_socket, F_GETFL);
+	//		if (option == -1) return -5;
+
+	//		option |= O_NONBLOCK;
+	//		ret = fcntl(m_socket, F_SETFL, option);
+	//		if (ret == -1) return -6;
+	//	}
+
+	//	return 0;
+	//}
+
 	virtual int Init(const CSockParam& param) {
+		printf("inInit!!!\n");
 		if (m_status != 0)return -1;
 		m_param = param;
 		int type = (m_param.attr & SOCK_ISUDP) ? SOCK_DGRAM : SOCK_STREAM;
 		if (m_socket == -1)
 			m_socket = socket(PF_LOCAL, type, 0);
+		else
+			m_status = 2;//accept来的套接字已经处于连接状态
 		if (m_socket == -1)return -2;
 		int ret = 0;
 		if (m_param.attr & SOCK_ISSERVER) {
+			printf("isserver!!!\n");
 			ret = bind(m_socket, m_param.addrun(), sizeof(sockaddr_un));
 			if (ret == -1)return -3;
 			ret = listen(m_socket, 32);
 			if (ret == -1)return -4;
 		}
 		if (m_param.attr & SOCK_ISNONBLOCK) {
+			printf("isnonblock!!!\n");
 			int option = fcntl(m_socket, F_GETFL);
+			printf("---====m_socket = %d", m_socket);
 			if (option == -1)return -5;
 			option |= O_NONBLOCK;
 			ret = fcntl(m_socket, F_SETFL, option);
 			if (ret == -1)return -6;
 		}
-		m_status = 1;
+		if (m_status == 0)
+			m_status = 1;
+		printf("%s(%d):[%s]ret=%d\n", __FILE__, __LINE__, __FUNCTION__, ret);
 		return 0;
 	}
+
 	//连接服务器accept客户端connect对于udp这里可以忽略
 	virtual int Link(CSocketBase** pClient = NULL)
 	{
-		if (m_status <= 0 || (m_socket == -1))return -1;
+
+		if (m_status <= 0 || (m_socket == -1)) {
+			printf("%s(%d):[%s]m_socket=%d, m_status = %d\n", __FILE__, __LINE__, __FUNCTION__, m_socket, m_status);
+			return -1;
+		}
 		int ret = 0;
 		if (m_param.attr & SOCK_ISSERVER)
 		{

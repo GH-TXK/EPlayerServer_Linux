@@ -129,6 +129,7 @@ public:
 				return;
 			}
 			printf("%s(%d):[%s]ret=%d client=%d\n", __FILE__, __LINE__, __FUNCTION__, ret, (int)client);
+			printf("clientTakeLink!!!\n");
 			ret = client.Link();
 			printf("%s(%d):[%s]ret=%d client=%d\n", __FILE__, __LINE__, __FUNCTION__, ret, (int)client);
 		}
@@ -156,7 +157,9 @@ private:
 		printf("%s(%d):[%s] %p\n", __FILE__, __LINE__, __FUNCTION__, m_server);
 		EPEvents events;
 		std::map<int, CSocketBase*> mapClients;
+		int count = 0;
 		while (m_thread.isValid() && (m_epoll != -1) && (m_server != NULL)) {
+			//printf("count = %d\n", count);
 			ssize_t ret = m_epoll.WaitEvents(events, 1);
 			//printf("%s(%d):[%s] %d\n", __FILE__, __LINE__, __FUNCTION__, ret);
 			if (ret < 0)break;
@@ -170,6 +173,7 @@ private:
 						printf("%s(%d):[%s]ptr=%d,m_server = %d \n", __FILE__, __LINE__, __FUNCTION__, events[i].data.ptr, m_server);
 						if (events[i].data.ptr == m_server) {
 							CSocketBase* pClient = NULL;
+							printf("serverTakeLink!!!\n");
 							int r = m_server->Link(&pClient);
 							printf("%s(%d):[%s]ret=%d \n", __FILE__, __LINE__, __FUNCTION__, r);
 							if (r < 0) continue;
@@ -180,10 +184,16 @@ private:
 								continue;
 							}
 							auto it = mapClients.find(*pClient);
-							if (it->second != NULL) {
+							if (it == mapClients.end()) {
+								// Ã»ÕÒµ½
+								printf("%s(%d):[%s]:mapClient is not find!!! \n", __FILE__, __LINE__, __FUNCTION__);
+							}
+							else {
 								delete it->second;
+								printf("%s(%d):[%s]:mapClient is delete \n", __FILE__, __LINE__, __FUNCTION__);
 							}
 							mapClients[*pClient] = pClient;
+							printf("end:mapClient is clean!!!\n");
 						}
 						else {
 							printf("%s(%d):[%s]ptr=%p \n", __FILE__, __LINE__, __FUNCTION__, events[i].data.ptr);
@@ -208,7 +218,9 @@ private:
 					break;
 				}
 			}
+			count++;
 		}
+		printf("count = %d\n", count);
 		for (auto it = mapClients.begin(); it != mapClients.end(); it++) {
 			if (it->second) {
 				delete it->second;
@@ -254,7 +266,7 @@ private:
 //
 #define DUMPI(data, size) CLoggerServer::Trace(LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_INFO, data, size))
 #define DUMPD(data, size) CLoggerServer::Trace(LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_DEBUG, data, size))
-#define DUMPW(data, size) CLoggerServer::TraceLogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_WARNING, data, size))
-#define DUMPE(data, size) CLoggerServer::TraceLogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_ERROR, data, size))
-#define DUMPF(data, size) CLoggerServer::TraceLogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_FATAL, data, size))
+#define DUMPW(data, size) CLoggerServer::Trace(LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_WARNING, data, size))
+#define DUMPE(data, size) CLoggerServer::Trace(LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_ERROR, data, size))
+#define DUMPF(data, size) CLoggerServer::Trace(LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_FATAL, data, size))
 #endif

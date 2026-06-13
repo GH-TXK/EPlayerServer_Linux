@@ -52,6 +52,7 @@ public:
 		m_mapThread[m_thread] = this;
 		ret = pthread_attr_destroy(&attr);
 		if (ret != 0)return -5;
+		printf("epoll thread started\n");
 		return 0;
 	}
 	int Pause() {

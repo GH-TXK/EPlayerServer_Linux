@@ -203,11 +203,15 @@ public:
 		if (m_socket == -1)return -2;
 		int ret = 0;
 		if (m_param.attr & SOCK_ISSERVER) {
-			printf("isserver!!!\n");
+			printf("%s(%d)<%s>:pid = %d,isserver=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
 			ret = bind(m_socket, m_param.addrun(), sizeof(sockaddr_un));
 			if (ret == -1)return -3;
 			ret = listen(m_socket, 32);
 			if (ret == -1)return -4;
+		}
+		else
+		{
+			printf("%s(%d)<%s>:pid = %d,isclient=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(),m_socket);
 		}
 		if (m_param.attr & SOCK_ISNONBLOCK) {
 			printf("isnonblock!!!\n");
@@ -220,7 +224,7 @@ public:
 		}
 		if (m_status == 0)
 			m_status = 1;
-		printf("%s(%d):[%s]ret=%d\n", __FILE__, __LINE__, __FUNCTION__, ret);
+		printf("%s(%d):[%s],pid = %d,ret=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(), ret);
 		return 0;
 	}
 
@@ -242,6 +246,7 @@ public:
 			if (fd == -1)return -3;
 			*pClient = new CLocalSocket(fd);
 			if (*pClient == NULL)return -4;
+			printf("%s(%d)<%s>:pid = %d,socket=%d,serverLink!!!\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
 			ret = (*pClient)->Init(param);
 			if (ret != 0)
 			{
@@ -252,6 +257,7 @@ public:
 		}
 		else
 		{
+			printf("%s(%d)<%s>:pid = %d,socket=%d,clientLink!!!\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
 			ret = connect(m_socket, m_param.addrun(), sizeof(sockaddr_un));
 			if (ret != 0)return -6;
 		}
@@ -265,6 +271,7 @@ public:
 		ssize_t index = 0;
 		while (index < (ssize_t)data.size()) {
 			ssize_t len = write(m_socket, (char*)data + index, data.size() - index);
+			printf("len = %d,write is finish!!!\n", len);
 			if (len == 0)return -2;
 			if (len < 0)return -3;
 			index += len;

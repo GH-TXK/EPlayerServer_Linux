@@ -2,11 +2,14 @@
 #include "Logger.h"
 #include "CServer.h"
 #include <map>
-
+/*
+* 1. 客户端的地址问题
+* 2. 连接回调的参数问题
+* 3. 接收回调的参数问题
+*/
 #define ERR_RETURN(ret, err) if(ret!=0){TRACEE("ret= %d errno = %d msg = [%s]", ret, errno, strerror(errno));return err;}
 
 #define WARN_CONTINUE(ret) if(ret!=0){TRACEW("ret= %d errno = %d msg = [%s]", ret, errno, strerror(errno));continue;}
-
 
 class CEdoyunPlayerServer :
 	public CBusiness
@@ -99,4 +102,3 @@ private:
 	CThreadPool m_pool;
 	unsigned m_count;
 };
-

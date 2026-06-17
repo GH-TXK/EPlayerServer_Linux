@@ -122,7 +122,8 @@ public:
 	}
 	virtual operator int() { return m_socket; }
 	virtual operator int()const { return m_socket; }
-
+	virtual operator const sockaddr_in* ()const { return &m_param.addr_in; }
+	virtual operator sockaddr_in* () { return &m_param.addr_in; }
 protected:
 
 	//Ì×½Ó×ÖÃèÊö·û£¬ Ä¬ÈÏÊÇ-1

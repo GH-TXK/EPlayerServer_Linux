@@ -1,7 +1,4 @@
-﻿#include <fcntl.h>
-#include "Process.h"
-#include "Logger.h"
-#include "ThreadPool.h"
+﻿#include "EdoyunPlayerServer.h"
 
 
 
@@ -48,7 +45,7 @@ int LogTest()
     return 0;
 }
 
-int main()
+int old_test()
 {
     CProcess logServer, clientServer;
     logServer.SetEntryFunction(CreateLogServer, &logServer);
@@ -70,7 +67,7 @@ int main()
         printf("%s(%d)<%s>:pid = %d,open success fd=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(), fd);
     }
     ret = clientServer.SendFD(fd);
-    if (ret != 0)printf("%s(%d)<%s>:pid = %d,ret = %d, errno:%d msg:%s\n", __FILE__, __LINE__, __FUNCTION__,ret, errno, strerror(errno));
+    if (ret != 0)printf("%s(%d)<%s>:pid = %d,ret = %d, errno:%d msg:%s\n", __FILE__, __LINE__, __FUNCTION__, ret, errno, strerror(errno));
     write(fd, "Edoyun", 6);
     close(fd);
     CThreadPool pool;
@@ -95,5 +92,22 @@ int main()
     (void)getchar();
     printf("%s(%d)<%s>:pid = %d\n", __FILE__, __LINE__, __FUNCTION__, getpid());
     if (ret != 0)return -3;
+    return 0;
+}
+
+int main()
+{
+    int ret = 0;
+    CProcess proclog;
+    ret = proclog.SetEntryFunction(CreateLogServer, &proclog);
+    ERR_RETURN(ret, -1);
+    ret = proclog.CreateSubProcess();
+    ERR_RETURN(ret, -2);
+    CEdoyunPlayerServer business(2);
+    CServer server;
+    ret = server.Init(&business);
+    ERR_RETURN(ret, -3);
+    ret = server.Run();
+    ERR_RETURN(ret, -4);
     return 0;
 }

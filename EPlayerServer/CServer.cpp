@@ -12,7 +12,7 @@ int CServer::Init(CBusiness* business, const Buffer& ip, short port)
 	int ret = 0;
 	if (business == NULL)return -1;
 	m_business = business;
-	ret = m_process.SetEntryFunction(&CBusiness::BusinessProcess, m_business);
+	ret = m_process.SetEntryFunction(&CBusiness::BusinessProcess, m_business, &m_process);
 	if (ret != 0)return -2;
 	ret = m_process.CreateSubProcess();
 	if (ret != 0)return -3;
@@ -63,7 +63,8 @@ int CServer::ThreadFunc()
 		ssize_t size = m_epoll.WaitEvents(events);
 		if (size < 0)break;
 		if (size > 0) {
-			for (ssize_t i = 0; i < size; i++) {
+			for (ssize_t i = 0; i < size; i++)
+			{
 				if (events[i].events & EPOLLERR) {
 					break;
 				}
@@ -72,7 +73,7 @@ int CServer::ThreadFunc()
 						CSocketBase* pClient = NULL;
 						ret = m_server->Link(&pClient);
 						if (ret != 0)continue;
-						ret = m_process.SendFD(*pClient);
+						ret = m_process.SendSocket(*pClient, *pClient);
 						delete pClient;
 						if (ret != 0) {
 							TRACEE("send client %d failed!", (int)*pClient);

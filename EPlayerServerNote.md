@@ -638,13 +638,13 @@
    这是一个非常完整、健壮的 pthread 线程入口函数写法。
 
 2. ```
-   		struct sigaction act = { 0 };
-   		sigemptyset(&act.sa_mask);
-   		act.sa_flags = SA_SIGINFO;
-   		act.sa_sigaction = &CThread::Sigaction;
-   		sigaction(SIGUSR1, &act, NULL);
-   		sigaction(SIGUSR2, &act, NULL);
-   		thiz->EnterThread();
+   	struct sigaction act = { 0 };
+      		sigemptyset(&act.sa_mask);
+      		act.sa_flags = SA_SIGINFO;
+      		act.sa_sigaction = &CThread::Sigaction;
+      		sigaction(SIGUSR1, &act, NULL);
+      		sigaction(SIGUSR2, &act, NULL);
+      		thiz->EnterThread();
    ```
 
    查看我的想法
@@ -806,3 +806,222 @@
    3. 指定：用带 `siginfo` 的高级处理函数形式。
    4. 把 `CThread::Sigaction` 作为 SIGUSR1 / SIGUSR2 的处理函数。
    5. 然后开始执行线程主逻辑 `EnterThread()`，在运行过程中就能被信号“控制”。
+
+## 26.线程池的实现
+
+### 点：
+
+1. # `thread_local` 完整讲解（C++11 及以上）
+
+   ## 1. 一句话定义
+
+   `thread_local` 是**存储期说明符**，修饰的变量：**每个线程拥有该变量的独立副本**，线程之间互不干扰；变量生命周期和所属线程一致。
+
+   搭配 `static thread_local CLocalSocket client;` 一起拆开讲。
+
+   ## 2. 三种存储期对比（关键）
+
+   C++ 变量三种本地存储：
+
+   1. **自动存储（局部变量，无修饰）**
+
+      cpp
+
+      
+
+      运行
+
+      
+
+      
+
+      
+
+      ```
+      void func() {
+          int a; // 栈上，函数调用创建，函数退出销毁
+      }
+      ```
+
+   2. **static 静态存储（全局 / 静态局部）**
+
+      cpp
+
+      
+
+      运行
+
+      
+
+      
+
+      
+
+      ```
+      void func() {
+          static int b; // 全局唯一一份，所有线程共用，多线程竞争
+      }
+      ```
+
+   3. **thread_local 线程本地存储**
+
+      cpp
+
+      
+
+      运行
+
+      
+
+      
+
+      
+
+      ```
+      thread_local int c; // 每个线程单独一份，线程创建分配，线程结束销毁
+      ```
+
+   ## 3. `thread_local` 三种合法组合
+
+   ### ① 全局作用域 `thread_local`
+
+   cpp
+
+   
+
+   运行
+
+   
+
+   
+
+   
+
+   ```
+   thread_local int g_val;
+   ```
+
+   每个线程有独立 `g_val`，主线程、子线程读写互不影响。
+
+   ### ② 静态局部变量 `static thread_local`（你代码里的写法）
+
+   cpp
+
+   
+
+   运行
+
+   
+
+   
+
+   
+
+   ```
+   void func() {
+       static thread_local CLocalSocket client;
+   }
+   ```
+
+   - `thread_local`：**每个线程一份独立 client 对象**，A 线程操作自己的 client，B 线程操作自己的，不会串连接；
+   - `static`：保证**第一次进入函数时才构造**，不会每次调用函数重复创建销毁；
+   - 生命周期：线程退出时自动析构。
+
+   ### ③ 类静态成员 `static thread_local`
+
+   cpp
+
+   
+
+   运行
+
+   
+
+   
+
+   
+
+   ```
+   struct A {
+       static thread_local int x;
+   };
+   ```
+
+   每个线程拥有一份 `A::x`。
+
+   > 不能用于普通局部非 static 变量：`thread_local int x;` 写在函数内不加 static 会报错。
+
+   ## 4. 你的代码 `static thread_local CLocalSocket client;` 作用
+
+   场景大概率：**每个线程持有自己独立的 socket 连接**
+
+   - 线程 1 调用函数：创建线程 1 专属 socket；
+   - 线程 2 调用函数：创建线程 2 专属 socket；
+   - 两个线程读写 `client` 完全隔离，不需要加锁，不会出现多线程共用同一个 socket 导致错乱；
+   - `static` 避免每次函数调用反复创建销毁 socket，每个线程只初始化一次。
+
+   ## 5. 核心特性
+
+   1. **隔离性**：线程之间看不到对方的副本，天然无竞争，不用互斥锁；
+   2. **生命周期**：变量在线程启动时初始化，线程退出时析构；
+   3. **初始化时机**
+      - 全局 `thread_local`：线程第一次访问该变量时初始化；
+      - `static thread_local` 局部：线程第一次执行到该代码行初始化；
+   4. **性能**：读取 TLS 变量有轻微开销，但远低于加锁；适合线程专属资源（连接、缓存、上下文）；
+   5. **限制**
+      - C++11 才支持；
+      - 不能修饰函数参数、局部非 static 变量；
+      - 大量线程 + 大量 `thread_local` 变量会增加内存占用（每个线程都存一份）。
+
+   ## 6. 对比示例，直观区别
+
+   cpp
+
+   
+
+   运行
+
+   
+
+   
+
+   
+
+   ```
+   #include <thread>
+   #include <iostream>
+   using namespace std;
+   
+   // 普通static：所有线程共用同一个
+   static int s_num = 0;
+   // thread_local：每个线程独立
+   thread_local int t_num = 0;
+   
+   void work() {
+       s_num++;
+       t_num++;
+       cout << "static共享变量：" << s_num 
+            << "  线程私有变量：" << t_num << endl;
+   }
+   
+   int main() {
+       thread t1(work);
+       thread t2(work);
+       t1.join();
+       t2.join();
+       return 0;
+   }
+   ```
+
+   输出效果：
+
+   - `s_num` 会变成 2（两个线程累加同一个变量）
+   - `t_num` 永远是 1（每个线程各自一份，互不干扰）
+
+   ## 7. 常见使用场景
+
+   1. 线程专属网络连接（你代码 socket 场景）；
+   2. 线程日志缓冲区；
+   3. 线程独立随机数种子；
+   4. 无锁线程本地缓存；
+   5. 避免递归 / 多线程重入冲突的上下文对象。

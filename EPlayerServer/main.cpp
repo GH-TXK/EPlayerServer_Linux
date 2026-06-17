@@ -1,6 +1,7 @@
 ﻿#include <fcntl.h>
 #include "Process.h"
 #include "Logger.h"
+#include "ThreadPool.h"
 
 
 
@@ -72,6 +73,24 @@ int main()
     if (ret != 0)printf("%s(%d)<%s>:pid = %d,ret = %d, errno:%d msg:%s\n", __FILE__, __LINE__, __FUNCTION__,ret, errno, strerror(errno));
     write(fd, "Edoyun", 6);
     close(fd);
+    CThreadPool pool;
+    ret = pool.Start(4);
+    printf("%s(%d):<%s> ret=%d\n", __FILE__, __LINE__, __FUNCTION__, ret);
+    if (ret != 0)printf("errno:%d msg:%s\n", errno, strerror(errno));
+    ret = pool.AddTask(LogTest);
+    printf("%s(%d):<%s> ret=%d\n", __FILE__, __LINE__, __FUNCTION__, ret);
+    if (ret != 0)printf("errno:%d msg:%s\n", errno, strerror(errno));
+    ret = pool.AddTask(LogTest);
+    printf("%s(%d):<%s> ret=%d\n", __FILE__, __LINE__, __FUNCTION__, ret);
+    if (ret != 0)printf("errno:%d msg:%s\n", errno, strerror(errno));
+    ret = pool.AddTask(LogTest);
+    printf("%s(%d):<%s> ret=%d\n", __FILE__, __LINE__, __FUNCTION__, ret);
+    if (ret != 0)printf("errno:%d msg:%s\n", errno, strerror(errno));
+    ret = pool.AddTask(LogTest);
+    printf("%s(%d):<%s> ret=%d\n", __FILE__, __LINE__, __FUNCTION__, ret);
+    if (ret != 0)printf("errno:%d msg:%s\n", errno, strerror(errno));
+    (void)getchar();
+    pool.Close();
     logServer.SendFD(-1);
     (void)getchar();
     printf("%s(%d)<%s>:pid = %d\n", __FILE__, __LINE__, __FUNCTION__, getpid());

@@ -82,7 +82,7 @@ public:
 		if (m_file == NULL)return -2;
 		int ret = m_epoll.Create(1);
 		if (ret != 0)return -3;
-		m_server = new CLocalSocket();
+		m_server = new CSocket();
 		if (m_server == NULL) {
 			Close();
 			return -4;
@@ -119,7 +119,7 @@ public:
 	//给其他非日志进程的进程和线程使用的
 	static void Trace(const LogInfo& info) {
 		int ret = 0;
-		static thread_local CLocalSocket client;
+		static thread_local CSocket client;
 		if (client == -1) {
 			ret = client.Init(CSockParam("./log/server.sock", 0));
 			if (ret != 0) {
@@ -203,8 +203,9 @@ private:
 								int r = pClient->Recv(data);
 								printf("%s(%d):[%s]ret=%d \n", __FILE__, __LINE__, __FUNCTION__, r);
 								if (r <= 0) {
-									delete pClient;
+									
 									mapClients[*pClient] = NULL;
+									delete pClient;
 								}
 								else {
 									printf("%s(%d):[%s]data=%s \n", __FILE__, __LINE__, __FUNCTION__, (char*)data);
@@ -260,7 +261,7 @@ private:
 #define LOGW LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_WARNING)
 #define LOGE LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_ERROR)
 #define LOGF LogInfo(__FILE__, __LINE__, __FUNCTION__, getpid(), pthread_self(), LOG_FATAL)
-
+		
 //内存导出
 //00 01 02 65……  ; ...a……
 //

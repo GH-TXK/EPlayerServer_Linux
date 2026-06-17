@@ -23,6 +23,7 @@ enum SockAttr {
 	SOCK_ISSERVER = 1,//是否服务器，1表示是，0表示客户端
 	SOCK_ISNONBLOCK = 2,//是否阻塞， 1表示阻塞， 0表示非阻塞
 	SOCK_ISUDP = 4,//是否为UDP， 1表示udp， 0表示tcp
+	SOCK_ISIP = 8,//是否为IP协议， 1表示IP协议，0表示本地套接字
 };
 
 class CSockParam {
@@ -40,6 +41,12 @@ public:
 		addr_in.sin_family = AF_INET;
 		addr_in.sin_port = port;
 		addr_in.sin_addr.s_addr = inet_addr(ip);
+	}
+	CSockParam(const sockaddr_in* addrin, int attr) {
+		this->ip = ip;
+		this->port = port;
+		this->attr = attr;
+		memcpy(&addr_in, addrin, sizeof(addr_in));
 	}
 	CSockParam(const Buffer& path, int attr) {
 		ip = path;
@@ -103,7 +110,10 @@ public:
 		m_status = 3;
 		if (m_socket != -1)
 		{
-			unlink(m_param.ip);
+			if ((m_param.attr & SOCK_ISSERVER)&& //服务器
+				((m_param.attr & SOCK_ISIP) == 0)) {//非IP
+				unlink(m_param.ip);
+			}
 			int fd = m_socket;
 			m_socket = -1;
 			close(fd);
@@ -123,17 +133,17 @@ protected:
 	CSockParam m_param;
 };
 
-class CLocalSocket
+class CSocket
 	:public CSocketBase
 {
 public:
-	CLocalSocket() :CSocketBase() {}
-	CLocalSocket(int sock) :CSocketBase() {
+	CSocket() :CSocketBase() {}
+	CSocket(int sock) :CSocketBase() {
 		m_socket = sock;
 		m_status = 0;
 	}
 	//传递析构操作
-	virtual ~CLocalSocket() {
+	virtual ~CSocket() {
 		Close();
 	}
 public:
@@ -192,31 +202,35 @@ public:
 	//}
 
 	virtual int Init(const CSockParam& param) {
-		printf("inInit!!!\n");
+		//printf("inInit!!!\n");
 		if (m_status != 0)return -1;
 		m_param = param;
 		int type = (m_param.attr & SOCK_ISUDP) ? SOCK_DGRAM : SOCK_STREAM;
-		if (m_socket == -1)
-			m_socket = socket(PF_LOCAL, type, 0);
+		if (m_socket == -1) {
+			if (param.attr & SOCK_ISIP) {
+				m_socket = socket(PF_INET, type, 0);
+			}
+			else
+			{
+				m_socket = socket(PF_LOCAL, type, 0);
+			}
+		}
 		else
 			m_status = 2;//accept来的套接字已经处于连接状态
 		if (m_socket == -1)return -2;
 		int ret = 0;
 		if (m_param.attr & SOCK_ISSERVER) {
-			printf("%s(%d)<%s>:pid = %d,isserver=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
-			ret = bind(m_socket, m_param.addrun(), sizeof(sockaddr_un));
+			//printf("%s(%d)<%s>:pid = %d,isserver=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
+			if(param.attr & SOCK_ISIP)
+				ret = bind(m_socket, m_param.addrin(), sizeof(sockaddr_in));
+			else
+				ret = bind(m_socket, m_param.addrun(), sizeof(sockaddr_un));
 			if (ret == -1)return -3;
 			ret = listen(m_socket, 32);
 			if (ret == -1)return -4;
 		}
-		else
-		{
-			printf("%s(%d)<%s>:pid = %d,isclient=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(),m_socket);
-		}
 		if (m_param.attr & SOCK_ISNONBLOCK) {
-			printf("isnonblock!!!\n");
 			int option = fcntl(m_socket, F_GETFL);
-			printf("---====m_socket = %d", m_socket);
 			if (option == -1)return -5;
 			option |= O_NONBLOCK;
 			ret = fcntl(m_socket, F_SETFL, option);
@@ -224,7 +238,6 @@ public:
 		}
 		if (m_status == 0)
 			m_status = 1;
-		printf("%s(%d):[%s],pid = %d,ret=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(), ret);
 		return 0;
 	}
 
@@ -233,7 +246,7 @@ public:
 	{
 
 		if (m_status <= 0 || (m_socket == -1)) {
-			printf("%s(%d):[%s]m_socket=%d, m_status = %d\n", __FILE__, __LINE__, __FUNCTION__, m_socket, m_status);
+			//printf("%s(%d):[%s]m_socket=%d, m_status = %d\n", __FILE__, __LINE__, __FUNCTION__, m_socket, m_status);
 			return -1;
 		}
 		int ret = 0;
@@ -241,10 +254,20 @@ public:
 		{
 			if (pClient == NULL)return -2;
 			CSockParam param;
-			socklen_t len = sizeof(sockaddr_un);
-			int fd = accept(m_socket, param.addrun(), &len);
+			int fd = -1;
+			socklen_t len = 0;
+			if (m_param.attr & SOCK_ISIP) {
+				param.attr |= SOCK_ISIP;
+				len = sizeof(sockaddr_in);
+				fd = accept(m_socket, param.addrin(), &len);
+			}
+			else
+			{
+				len = sizeof(sockaddr_un);
+				fd = accept(m_socket, param.addrun(), &len);
+			}
 			if (fd == -1)return -3;
-			*pClient = new CLocalSocket(fd);
+			*pClient = new CSocket(fd);
 			if (*pClient == NULL)return -4;
 			printf("%s(%d)<%s>:pid = %d,socket=%d,serverLink!!!\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
 			ret = (*pClient)->Init(param);
@@ -257,8 +280,10 @@ public:
 		}
 		else
 		{
-			printf("%s(%d)<%s>:pid = %d,socket=%d,clientLink!!!\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
-			ret = connect(m_socket, m_param.addrun(), sizeof(sockaddr_un));
+			if (m_param.attr & SOCK_ISIP)
+				ret = connect(m_socket, m_param.addrin(), sizeof(sockaddr_in));
+			else
+				ret = connect(m_socket, m_param.addrun(), sizeof(sockaddr_un));
 			if (ret != 0)return -6;
 		}
 		m_status = 2;

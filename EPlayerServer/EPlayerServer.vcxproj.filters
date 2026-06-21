@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="CServer.cpp" />
+    <ClCompile Include="DatabaseClient.cpp" />
+    <ClCompile Include="Epoll.cpp" />
+    <ClCompile Include="HttpParser.cpp" />
+    <ClCompile Include="http_parser.c" />
+    <ClCompile Include="Logger.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Thread.cpp" />
+    <ClCompile Include="sqlite3.c">
+      <Filter>sqlite3</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CServer.h" />
+    <ClInclude Include="DatabaseClient.h" />
+    <ClInclude Include="EdoyunPlayerServer.h" />
+    <ClInclude Include="Epoll.h" />
+    <ClInclude Include="Function.h" />
+    <ClInclude Include="HttpParser.h" />
+    <ClInclude Include="http_parser.h" />
+    <ClInclude Include="Logger.h" />
+    <ClInclude Include="Process.h" />
+    <ClInclude Include="Public.h" />
+    <ClInclude Include="Socket.h" />
+    <ClInclude Include="Thread.h" />
+    <ClInclude Include="ThreadPool.h" />
+    <ClInclude Include="sqlite3.h">
+      <Filter>sqlite3</Filter>
+    </ClInclude>
+    <ClInclude Include="sqlite3ext.h">
+      <Filter>sqlite3</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="sqlite3">
+      <UniqueIdentifier>{e8336e72-1393-4f9f-9042-32a5ebb9e1cd}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -76,6 +76,7 @@
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
     <ClCompile Include="CServer.cpp" />
+    <ClCompile Include="DatabaseClient.cpp" />
     <ClCompile Include="Epoll.cpp" />
     <ClCompile Include="HttpParser.cpp" />
     <ClCompile Include="http_parser.c">
@@ -85,10 +86,17 @@
     </ClCompile>
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="sqlite3.c">
+      <CAdditionalWarning Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">switch;no-deprecated-declarations;empty-body;return-type;parentheses;no-pointer-sign;no-format;uninitialized;unreachable-code;unused-function;unused-value;unused-variable;%(CAdditionalWarning)</CAdditionalWarning>
+      <CppAdditionalWarning Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">switch;no-deprecated-declarations;empty-body;return-type;parentheses;no-format;uninitialized;unreachable-code;unused-function;unused-value;unused-variable;%(CppAdditionalWarning)</CppAdditionalWarning>
+      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">-Wno-conversion -Wno-misleading-indentation %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="Sqlite3Client.cpp" />
     <ClCompile Include="Thread.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CServer.h" />
+    <ClInclude Include="DatabaseClient.h" />
     <ClInclude Include="EdoyunPlayerServer.h" />
     <ClInclude Include="Epoll.h" />
     <ClInclude Include="Function.h" />
@@ -96,7 +104,11 @@
     <ClInclude Include="http_parser.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="Process.h" />
+    <ClInclude Include="Public.h" />
     <ClInclude Include="Socket.h" />
+    <ClInclude Include="sqlite3.h" />
+    <ClInclude Include="Sqlite3Client.h" />
+    <ClInclude Include="sqlite3ext.h" />
     <ClInclude Include="Thread.h" />
     <ClInclude Include="ThreadPool.h" />
   </ItemGroup>

@@ -83,6 +83,15 @@ class _sqlite3_field_
 {
 public:
 	_sqlite3_field_();
+	_sqlite3_field_(
+		int ntype,
+		const Buffer& name,
+		unsigned attr,
+		const Buffer& type,
+		const Buffer& size,
+		const Buffer& default_,
+		const Buffer& check
+	);
 	virtual Buffer Create();
 	virtual void LoadFromStr(const Buffer& etr);
 	//whereÓï¾äÊ¹ÓÃµÄ

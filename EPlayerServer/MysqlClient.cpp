@@ -338,7 +338,7 @@ Buffer _mysql_field_::Create()
 	//BLOB TEXT GEOMETRY JSON不能有默认值的
 	if ((Attr & DEFAULT) && (Default.size() > 0) && (Type != "BLOB") && (Type != "TEXT") && (Type != "GEOMETRY") && (Type != "JSON"))
 	{
-		sql += " DEFAULT " + Default + " ";
+		sql += " DEFAULT \"" + Default + "\" ";
 	}
 	//UNIQUE PRIMARY_KEY 外面处理
 	//CHECK mysql不支持

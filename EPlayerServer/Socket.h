@@ -14,6 +14,7 @@ enum SockAttr {
 	SOCK_ISNONBLOCK = 2,//是否阻塞， 1表示阻塞， 0表示非阻塞
 	SOCK_ISUDP = 4,//是否为UDP， 1表示udp， 0表示tcp
 	SOCK_ISIP = 8,//是否为IP协议， 1表示IP协议，0表示本地套接字
+	SOCK_ISREUSE = 16//是否重用地址
 };
 
 class CSockParam {
@@ -29,7 +30,7 @@ public:
 		this->port = port;
 		this->attr = attr;
 		addr_in.sin_family = AF_INET;
-		addr_in.sin_port = port;
+		addr_in.sin_port = htons(port);
 		addr_in.sin_addr.s_addr = inet_addr(ip);
 	}
 	CSockParam(const sockaddr_in* addrin, int attr) {
@@ -193,30 +194,30 @@ public:
 	//}
 
 	virtual int Init(const CSockParam& param) {
-		//printf("inInit!!!\n");
 		if (m_status != 0)return -1;
 		m_param = param;
 		int type = (m_param.attr & SOCK_ISUDP) ? SOCK_DGRAM : SOCK_STREAM;
 		if (m_socket == -1) {
-			if (param.attr & SOCK_ISIP) {
+			if (param.attr & SOCK_ISIP)
 				m_socket = socket(PF_INET, type, 0);
-			}
 			else
-			{
 				m_socket = socket(PF_LOCAL, type, 0);
-			}
 		}
 		else
-			m_status = 2;//accept来的套接字已经处于连接状态
+			m_status = 2;//accept来的套接字，已经处于连接状态
 		if (m_socket == -1)return -2;
 		int ret = 0;
+		if (m_param.attr & SOCK_ISREUSE) {
+			int option = 1;
+			ret = setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+			if (ret == -1)return -7;
+		}
 		if (m_param.attr & SOCK_ISSERVER) {
-			//printf("%s(%d)<%s>:pid = %d,isserver=%d\n", __FILE__, __LINE__, __FUNCTION__, getpid(), m_socket);
-			if(param.attr & SOCK_ISIP)
+			if (param.attr & SOCK_ISIP)
 				ret = bind(m_socket, m_param.addrin(), sizeof(sockaddr_in));
 			else
 				ret = bind(m_socket, m_param.addrun(), sizeof(sockaddr_un));
-			if (ret == -1)return -3;
+			if (ret == -1) return -3;
 			ret = listen(m_socket, 32);
 			if (ret == -1)return -4;
 		}
@@ -298,12 +299,14 @@ public:
 	virtual int Recv(Buffer& data)
 	{
 		if (m_status < 2 || (m_socket == -1))return -1;
+		data.resize(1024 * 1024);
 		ssize_t len = read(m_socket, data, data.size());
 		if (len > 0)
 		{
 			data.resize(len);
 			return (int)len;//收到数据
 		}
+		data.clear();
 		if (len < 0)
 		{
 			if (errno == EINTR || (errno == EAGAIN))

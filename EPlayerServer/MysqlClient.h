@@ -67,7 +67,7 @@ public:
 	virtual Buffer Delete(const _Table_& values);
 	//TODO:参数进行优化
 	virtual Buffer Modify(const _Table_& values);
-	virtual Buffer Query();
+	virtual Buffer Query(const Buffer& condition = "");
 	//创建一个基于表的对象
 	virtual PTable Copy()const;
 	virtual void ClearFieldUsed();

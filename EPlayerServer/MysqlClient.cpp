@@ -1,5 +1,6 @@
 #include "MysqlClient.h"
 #include <sstream>
+#include "Logger.h"
 
 int CMysqlClient::Connect(const KeyValue& args)
 {
@@ -12,10 +13,11 @@ int CMysqlClient::Connect(const KeyValue& args)
 		atoi(args.at("port")),
 		NULL, 0);
 	if ((ret == NULL) && (mysql_errno(&m_db) != 0)) {
-		printf("%s %s\n", __FUNCTION__, mysql_errno(&m_db));
+		printf("%s %d %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		TRACEE("%d %s", mysql_errno(&m_db), mysql_error(&m_db));
 		mysql_close(&m_db);
 		bzero(&m_db, sizeof(m_db));
-		return - 3;
+		return -3;
 	}
 	m_bInit = true;
 	return 0;
@@ -26,7 +28,8 @@ int CMysqlClient::Exec(const Buffer& sql)
 	if (!m_bInit)return -1;
 	int ret = mysql_real_query(&m_db, sql, sql.size());
 	if (ret != 0) {
-		printf("%s %s\n", __FUNCTION__, mysql_errno(&m_db));
+		printf("%s %d %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		TRACEE("%d %s", mysql_errno(&m_db), mysql_error(&m_db));
 		return -2;
 	}
 	return 0;
@@ -38,7 +41,8 @@ int CMysqlClient::Exec(const Buffer& sql, Result& result, const _Table_& table)
 
 	int ret = mysql_real_query(&m_db, sql.data(), sql.size());
 	if (ret != 0) {
-		printf("%s error(%d): %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		printf("%s %d %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		TRACEE("%d %s", mysql_errno(&m_db), mysql_error(&m_db));
 		return -2;
 	}
 
@@ -73,7 +77,8 @@ int CMysqlClient::StartTransaction()
 	if (!m_bInit)return -1;
 	int ret = mysql_real_query(&m_db, "BEGIN", 6);
 	if (ret != 0) {
-		printf("%s error(%d): %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		printf("%s %d %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		TRACEE("%d %s", mysql_errno(&m_db), mysql_error(&m_db));
 		return -2;
 	}
 	return 0;
@@ -84,7 +89,8 @@ int CMysqlClient::CommitTransaction()
 	if (!m_bInit)return -1;
 	int ret = mysql_real_query(&m_db, "COMMIT", 7);
 	if (ret != 0) {
-		printf("%s %s\n", __FUNCTION__, mysql_errno(&m_db));
+		printf("%s %d %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		TRACEE("%d %s", mysql_errno(&m_db), mysql_error(&m_db));
 		return -2;
 	}
 	return 0;
@@ -95,7 +101,8 @@ int CMysqlClient::RollbackTransaction()
 	if (!m_bInit)return -1;
 	int ret = mysql_real_query(&m_db, "ROLLBACK", 9);
 	if (ret != 0) {
-		printf("%s %s\n", __FUNCTION__, mysql_errno(&m_db));
+		printf("%s %d %s\n", __FUNCTION__, mysql_errno(&m_db), mysql_error(&m_db));
+		TRACEE("%d %s", mysql_errno(&m_db), mysql_error(&m_db));
 		return -2;
 	}
 	return 0;
@@ -150,6 +157,7 @@ Buffer _mysql_table_::Create()
 		}
 	}
 	sql += ");";
+	printf("-------sql = %s\n", sql);
 	return sql;
 }
 
@@ -230,7 +238,7 @@ Buffer _mysql_table_::Modify(const _Table_& values)
 	return sql;
 }
 
-Buffer _mysql_table_::Query()
+Buffer _mysql_table_::Query(const Buffer& condition)
 {
 	Buffer sql = "SELECT ";
 	for (size_t i = 0; i < FieldDefine.size(); i++)
@@ -238,7 +246,11 @@ Buffer _mysql_table_::Query()
 		if (i > 0)sql += ',';
 		sql += '`' + FieldDefine[i]->Name + "` ";
 	}
-	sql += " FROM " + (Buffer)*this + ";";
+	sql += " FROM " + (Buffer)*this + " ";
+	if (condition.size() > 0) {
+		sql += " WHERE " + condition;
+	}
+	sql += ";";
 	printf("sql = %s\n", (char*)sql);
 	return sql;
 }
@@ -266,7 +278,7 @@ _mysql_table_::operator const Buffer() const
 _mysql_field_::_mysql_field_()
 {
 	nType = TYPE_NULL;
-	Value.Double = 0.0;
+	Value.String = nullptr; // 【关键修复】：统一将指针初始化为空，防止野指针
 }
 
 _mysql_field_::_mysql_field_(int ntype, const Buffer& name, unsigned attr, const Buffer& type, const Buffer& size, const Buffer& default_, const Buffer& check)
@@ -292,13 +304,24 @@ _mysql_field_::_mysql_field_(int ntype, const Buffer& name, unsigned attr, const
 _mysql_field_::_mysql_field_(const _mysql_field_& field)
 {
 	nType = field.nType;
+	Value.String = nullptr; // 【关键修复】：先初始化为空
+
 	switch (field.nType)
 	{
 	case TYPE_VARCHAR:
 	case TYPE_TEXT:
 	case TYPE_BLOB:
-		Value.String = new Buffer();
-		*Value.String = *field.Value.String;
+		// 【关键修复】：必须检查原对象的指针是否为空，才能进行拷贝！
+		if (field.Value.String != nullptr) {
+			Value.String = new Buffer(*field.Value.String);
+		}
+		else {
+			Value.String = nullptr;
+		}
+		break;
+	default:
+		// 如果不是字符串类型，直接拷贝 union 里的其他值
+		Value.Integer = field.Value.Integer;
 		break;
 	}
 
@@ -338,7 +361,14 @@ Buffer _mysql_field_::Create()
 	//BLOB TEXT GEOMETRY JSON不能有默认值的
 	if ((Attr & DEFAULT) && (Default.size() > 0) && (Type != "BLOB") && (Type != "TEXT") && (Type != "GEOMETRY") && (Type != "JSON"))
 	{
-		sql += " DEFAULT \"" + Default + "\" ";
+		// 如果是时间戳关键字，直接拼接，不加引号
+		if (Default == "CURRENT_TIMESTAMP") {
+			sql += " DEFAULT CURRENT_TIMESTAMP ";
+		}
+		// 其他普通的默认值，保留原有的双引号包裹
+		else {
+			sql += " DEFAULT \"" + Default + "\" ";
+		}
 	}
 	//UNIQUE PRIMARY_KEY 外面处理
 	//CHECK mysql不支持
@@ -350,6 +380,7 @@ Buffer _mysql_field_::Create()
 
 void _mysql_field_::LoadFromStr(const Buffer& str)
 {
+	TRACEI("映射字段: Name=[%s], nType=%d, 数据=[%s]", (char*)Name, nType, (char*)str);
 	switch (nType)
 	{
 	case TYPE_NULL:
@@ -364,7 +395,13 @@ void _mysql_field_::LoadFromStr(const Buffer& str)
 		break;
 	case TYPE_VARCHAR:
 	case TYPE_TEXT:
-		*Value.String = str;
+		//*Value.String = str;
+		 // 【关键修复】：如果之前已经分配过内存，先释放（防止内存泄漏）
+		if (Value.String != nullptr) {
+			delete Value.String;
+		}
+		// 重新分配内存并赋值
+		Value.String = new Buffer(str);
 		break;
 	case TYPE_BLOB:
 		*Value.String = Str2Hex(str);

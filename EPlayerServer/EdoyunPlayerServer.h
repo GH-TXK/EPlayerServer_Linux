@@ -154,7 +154,7 @@ private:
 			Buffer uri = url.Uri();
 
 			TRACEI("解析出的 uri 是: [%s]", (char*)uri);
-			if (uri == "/favicon.ico") {
+			if (uri == "favicon.ico") {
 				TRACEI("收到 favicon.ico 请求，忽略");
 				return 0; // 或者返回特定的成功码，表示正常处理完毕
 			}
@@ -171,33 +171,6 @@ private:
 				Buffer sql = dbuser.Query("user_name=\"" + user + "\"");
 				TRACEI("到172，sql");
 				ret = m_db->Exec(sql, result, dbuser);
-				// ====== 新增：结果集全面体检日志 ======
-				if (!result.empty()) {
-					auto user1 = result.front();
-					TRACEI("===== 数据库结果集体检开始 =====");
-					TRACEI("结果集总行数: %d", (int)result.size());
-
-					// 遍历 Fields 这个 map，看看里面到底装了什么
-					for (auto& pair : user1->Fields) {
-						PField field = pair.second;
-						if (field != nullptr) {
-							// 打印：Map的Key、对象内部的Name、nType、以及Value.String的内容
-							TRACEI("字段 -> MapKey=[%s], Name=[%s], nType=%d, StringPtr=%p",
-								(char*)pair.first,
-								(char*)field->Name,
-								field->nType,
-								field->Value.String);
-						}
-						else {
-							TRACEE("字段 -> MapKey=[%s], 但 PField 指针本身是 nullptr!", (char*)pair.first);
-						}
-					}
-					TRACEI("===== 数据库结果集体检结束 =====");
-				}
-				else {
-					TRACEE("数据库查询结果为空！");
-				}
-				// ================================
 				if (ret != 0) {
 					TRACEE("sql=%s ret=%d", (char*)sql, ret);
 					return -3;
@@ -212,25 +185,26 @@ private:
 				}
 				TRACEI("到186");
 				auto user1 = result.front();
-				Buffer pwd; // 先声明一个空的 Buffer
+				//Buffer pwd; // 先声明一个空的 Buffer
 
 				
-				// 1. 使用 find() 安全查找
-				auto it = user1->Fields.find("user_password");
-				if (it != user1->Fields.end()) {
-					PField field = it->second;
-					if (field != nullptr) {
-						// 【关键日志】：打印这个 nType=0 的对象的 Name！
-						TRACEE("找到 user_password 字段，但 Value.String 为空！Name=[%s], nType=%d",
-							(char*)field->Name, field->nType);
-					}
-					else {
-						TRACEE("Fields 里的 user_password 指针本身是 nullptr！");
-					}
-				}
-				else {
-					TRACEE("Fields 里根本没有 user_password 这个键！");
-				}
+				//// 1. 使用 find() 安全查找
+				//auto it = user1->Fields.find("user_password");
+				//if (it != user1->Fields.end()) {
+				//	PField field = it->second;
+				//	if (field != nullptr) {
+				//		// 【关键日志】：打印这个 nType=0 的对象的 Name！
+				//		TRACEE("找到 user_password 字段，但 Value.String 为空！Name=[%s], nType=%d",
+				//			(char*)field->Name, field->nType);
+				//	}
+				//	else {
+				//		TRACEE("Fields 里的 user_password 指针本身是 nullptr！");
+				//	}
+				//}
+				//else {
+				//	TRACEE("Fields 里根本没有 user_password 这个键！");
+				//}
+				Buffer pwd = *user1->Fields["user_password"]->Value.String;
 				TRACEI("password = %s", (char*)pwd);
 				//登录请求的验证
 				const char* MD5_KEY = "*&^%$#@b.v+h-b*g/h@n!h#n$d^ssx,.kl<kl";
@@ -239,8 +213,10 @@ private:
 				TRACEI("md5 = %s", (char*)md5);
 				if (md5 == sign) {
 					TRACEI("md5 == sign\n", (char*)pwd);
+					//result.pop_front();
 					return 0;
 				}
+				//result.pop_front();
 				return -6;
 			}
 		}

@@ -16,6 +16,7 @@ enum SockAttr {
 	SOCK_ISIP = 8,//是否为IP协议， 1表示IP协议，0表示本地套接字
 };
 
+#define INET_ADDRSTRLEN 16
 class CSockParam {
 public:
 	CSockParam() {
@@ -33,8 +34,8 @@ public:
 		addr_in.sin_addr.s_addr = inet_addr(ip);
 	}
 	CSockParam(const sockaddr_in* addrin, int attr) {
-		this->ip = ip;
-		this->port = port;
+		this->ip = inet_ntop(AF_INET, &(addrin->sin_addr), ip_str, INET_ADDRSTRLEN);
+		this->port = ntohs(addrin->sin_port);
 		this->attr = attr;
 		memcpy(&addr_in, addrin, sizeof(addr_in));
 	}
@@ -73,6 +74,7 @@ public:
 	Buffer ip;
 	short port;
 	int attr;
+	char ip_str[INET_ADDRSTRLEN];
 };
 
 class CSocketBase

@@ -24,4 +24,7 @@ public:
 	operator char* () { return (char*)c_str(); }
 	operator char* () const { return (char*)c_str(); }
 	operator const char* () const { return c_str(); }
+	operator unsigned char* () { return (unsigned char*)c_str(); }
+	operator const void* () const { return c_str(); }
+	operator void* () { return (char*)c_str(); }
 };

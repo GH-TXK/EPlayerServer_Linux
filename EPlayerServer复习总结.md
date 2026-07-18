@@ -1317,3 +1317,72 @@ int SafeDel(int fd) {
 4. **Del**：从红黑树上摘除该节点（O(log N)）。
 
 正是这种**“红黑树管理全量状态 + 就绪链表反馈活跃事件”**的组合拳，让 `epoll` 彻底摆脱了连接数 N 的束缚，成为了现代高性能网络服务器（如 Nginx、Redis、muduo）的基石。
+
+## m_process.SetEntryFunction(&CBusiness::BusinessProcess, m_business, &m_process);非静态成员函数指针隐含一个this指针
+
+这是一个非常经典的 C++ 成员函数指针调用问题。
+
+### 💡 核心答案
+
+`&CBusiness::BusinessProcess` 是一个**非静态成员函数指针**。在 C++ 中，非静态成员函数隐含了一个 `this` 指针作为第一个参数。
+
+因此，虽然 `BusinessProcess` 在声明时只显式接收 1 个参数 `(CProcess* proc)`，但在底层调用时，它实际需要 **2 个参数**：
+
+1. **隐式的 `this` 指针**：指向具体的 `CBusiness` 对象实例（即代码中的 `m_business`）。
+2. **显式的 `proc` 参数**：即代码中的 `&m_process`。
+
+### 🔍 详细拆解
+
+#### 1. 类型匹配分析
+
+让我们把 `SetEntryFunction` 的模板展开来看：
+
+```cpp
+// 原始调用
+m_process.SetEntryFunction(&CBusiness::BusinessProcess, m_business, &m_process);
+
+// 模板推导结果
+// _FUNCTION_ = int (CBusiness::*)(CProcess*)   ← 成员函数指针类型
+// _ARGS_...  = {CBusiness*, CProcess*}          ← 两个参数
+```
+
+| 传入的参数                    | 对应角色  | 说明                                                 |
+| ----------------------------- | --------- | ---------------------------------------------------- |
+| `&CBusiness::BusinessProcess` | `func`    | 成员函数指针，类型为 `int (CBusiness::*)(CProcess*)` |
+| `m_business`                  | `args[0]` | 绑定到隐式 `this` 指针，指定在哪个对象上调用         |
+| `&m_process`                  | `args[1]` | 绑定到显式参数 `CProcess* proc`                      |
+
+#### 2. CFunction 内部的调用等价于
+
+当后续通过 `(*base)()` 执行这个 `CFunction` 对象时，其内部实现本质上等价于：
+
+```cpp
+// CFunction::operator() 内部大致逻辑
+(m_business->*(&CBusiness::BusinessProcess))(&m_process);
+//  ^^^^^^^^^^^^                              ^^^^^^^^^^^
+//  提供 this 指针                             提供显式参数
+```
+
+这正是 C++ 中调用成员函数指针的标准语法：`(对象指针->*成员函数指针)(参数列表...)`。
+
+#### 3. 为什么不能只传一个参数？
+
+如果你尝试这样写：
+
+```cpp
+// ❌ 编译错误！
+m_process.SetEntryFunction(&CBusiness::BusinessProcess, &m_process);
+```
+
+编译器会报错，因为 `CFunction` 在构造时会尝试用 `&m_process` 去匹配 `this` 指针的位置，导致：
+
+- `this` 被绑定为 `CProcess*`（类型不匹配，应为 `CBusiness*`）
+- 显式参数 `proc` 缺失
+
+### ⚠️ 潜在隐患提醒
+
+虽然这段代码在语法上是正确的，但有一个值得注意的设计细节：
+
+> `m_business` 是以**裸指针值拷贝**的方式绑定进 `CFunction` 的。如果 `CServer::Close()` 先于任务执行完成就 `delete m_business`，那么当线程池稍后执行这个绑定的函数时，`this` 指针将变成**悬垂指针**，导致未定义行为。
+
+建议确保 `m_business` 的生命周期覆盖所有已提交任务的执行期，或在 `Close()` 中等待线程池排空后再释放业务对象。
